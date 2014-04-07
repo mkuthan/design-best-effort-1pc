@@ -14,11 +14,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.ImportResource;
 
 @Configuration
+@ImportResource("/integration.xml")
 @EnableAutoConfiguration
 @ComponentScan
 public class Application implements CommandLineRunner {
@@ -26,6 +29,9 @@ public class Application implements CommandLineRunner {
 	private static final Logger LOG = LoggerFactory.getLogger(Application.class);
 
 	private static final String QUEUE_NAME = "besteffort1pc";
+
+	@Autowired
+	private AnnotationConfigApplicationContext context;
 
 	@Autowired
 	private AggregateRootRepository aggregateRootRepository;
@@ -57,6 +63,8 @@ public class Application implements CommandLineRunner {
 
 		LOG.info("==== Save Target Aggregate Root '{}' ====", targetAggregateRootId);
 		aggregateRootRepository.save(new AggregateRoot(targetAggregateRootId));
+		
+		context.close();
 	}
 
 	@Bean
