@@ -23,11 +23,10 @@ repositories {
 
 dependencies {
 	compile('org.springframework.boot:spring-boot-starter-amqp')
-	compile('org.springframework.boot:spring-boot-starter-data-jpa')
+	compile('org.springframework.boot:spring-boot-starter-jdbc')
 	compile('org.springframework.boot:spring-boot-starter-integration')
-	compile('com.h2database:h2')
 	
-	testCompile('org.springframework.boot:spring-boot-starter-test')
+	runtime('mysql:mysql-connector-java')
 }
 
 task wrapper(type: Wrapper) { 
