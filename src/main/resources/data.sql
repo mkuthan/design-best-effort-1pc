@@ -1,1 +1,0 @@
-DELETE FROM aggregate_root;

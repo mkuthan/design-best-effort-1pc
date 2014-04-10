@@ -11,27 +11,27 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 @Component
-public class AggregateRootRepository {
+public class OrderRepository {
 
 	@Autowired
 	private JdbcTemplate jdbcTemplate;
 
 	@Transactional(readOnly = true)
-	public AggregateRoot load(String id) {
-		return DataAccessUtils.singleResult(jdbcTemplate.query("SELECT * FROM aggregate_root WHERE id = ?",
-				new Object[] { id }, new RowMapper<AggregateRoot>() {
+	public Order load(String id) {
+		return DataAccessUtils.singleResult(jdbcTemplate.query("SELECT * FROM ex_order WHERE id = ?",
+				new Object[] { id }, new RowMapper<Order>() {
 
 					@Override
-					public AggregateRoot mapRow(ResultSet rs, int rowNum) throws SQLException {
-						return new AggregateRoot(rs.getString("id"));
+					public Order mapRow(ResultSet rs, int rowNum) throws SQLException {
+						return new Order(rs.getString("id"));
 					}
 
 				}));
 	}
 
 	@Transactional(readOnly = false)
-	public void save(AggregateRoot aggregateRoot) {
-		jdbcTemplate.update("INSERT INTO aggregate_root(id) VALUES (?)", aggregateRoot.getId());
+	public void save(Order order) {
+		jdbcTemplate.update("INSERT INTO ex_order(id) VALUES (?)", order.getId());
 	}
 	
 }

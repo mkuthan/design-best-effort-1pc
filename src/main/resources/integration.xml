@@ -1,14 +1,48 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <beans xmlns="http://www.springframework.org/schema/beans" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xmlns:int="http://www.springframework.org/schema/integration" xmlns:int-jdbc="http://www.springframework.org/schema/integration/jdbc"
-	xsi:schemaLocation="http://www.springframework.org/schema/integration http://www.springframework.org/schema/integration/spring-integration.xsd
+	xmlns:int-amqp="http://www.springframework.org/schema/integration/amqp"
+	xsi:schemaLocation="http://www.springframework.org/schema/integration/amqp http://www.springframework.org/schema/integration/amqp/spring-integration-amqp.xsd
+		http://www.springframework.org/schema/integration http://www.springframework.org/schema/integration/spring-integration.xsd
 		http://www.springframework.org/schema/integration/jdbc http://www.springframework.org/schema/integration/jdbc/spring-integration-jdbc.xsd
 		http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd">
 
+	<!-- message store -->
 	<int-jdbc:message-store id="messageStore" data-source="dataSource" />
 
-	<int:channel id="domainEventsChannel">
+	<!-- inbound tx -->
+	<int-amqp:inbound-channel-adapter connection-factory="rabbitConnectionFactory"
+		transaction-manager="inboundTransactionManager" channel-transacted="true" channel="bufferedInputMessageChannel"
+		queue-names="${application.incomingQueue}" />
+
+	<int:channel id="bufferedInputMessageChannel">
 		<int:queue message-store="messageStore" />
 	</int:channel>
 
+	<!-- db tx -->
+	<int:bridge input-channel="bufferedInputMessageChannel" output-channel="inputMessageChannel">
+		<int:poller fixed-rate="1000" max-messages-per-poll="-1">
+			<int:transactional transaction-manager="dbTransactionManager" />
+		</int:poller>
+	</int:bridge>
+
+	<int:channel id="inputMessageChannel" />
+
+	<int:transformer input-channel="inputMessageChannel" output-channel="bufferedOutputMessageChannel" ref="salesService" />
+
+	<int:channel id="bufferedOutputMessageChannel">
+		<int:queue message-store="messageStore" />
+	</int:channel>
+
+	<!-- outbound tx -->
+	<int:bridge input-channel="bufferedOutputMessageChannel" output-channel="outputMessageChannel">
+		<int:poller fixed-rate="1000" max-messages-per-poll="-1">
+			<int:transactional transaction-manager="outboundTransactionManager" />
+		</int:poller>
+	</int:bridge>
+
+	<int:channel id="outputMessageChannel" />
+
+	<int-amqp:outbound-channel-adapter amqp-template="rabbitTemplate" channel="outputMessageChannel"
+		exchange-name="${application.exchange}" routing-key="${application.outgoingQueue}" />
 </beans>

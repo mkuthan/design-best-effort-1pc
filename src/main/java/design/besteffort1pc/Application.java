@@ -1,5 +1,7 @@
 package design.besteffort1pc;
 
+import javax.sql.DataSource;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.Binding;
@@ -8,36 +10,41 @@ import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer;
-import org.springframework.amqp.rabbit.listener.adapter.MessageListenerAdapter;
+import org.springframework.amqp.rabbit.transaction.RabbitTransactionManager;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.ImportResource;
+import org.springframework.data.transaction.ChainedTransactionManager;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 
 @Configuration
+@EnableAutoConfiguration(exclude = { DataSourceTransactionManagerAutoConfiguration.class })
 @ImportResource("/integration.xml")
-@EnableAutoConfiguration
 @ComponentScan
 public class Application implements CommandLineRunner {
 
 	private static final Logger LOG = LoggerFactory.getLogger(Application.class);
 
-	private static final String QUEUE_NAME = "besteffort1pc";
+	@Value("${application.incomingQueue}")
+	private String incomingQueueName;
 
-	@Autowired
-	private AnnotationConfigApplicationContext context;
-
-	@Autowired
-	private AggregateRootRepository aggregateRootRepository;
+	@Value("${application.outgoingQueue}")
+	private String outgoingQueueName;
 
 	@Autowired
 	private RabbitTemplate rabbitTemplate;
+
+	@Autowired
+	private AnnotationConfigApplicationContext context;
 
 	public static void main(String[] args) {
 		SpringApplication.run(Application.class, args);
@@ -45,56 +52,65 @@ public class Application implements CommandLineRunner {
 
 	@Override
 	public void run(String... args) throws Exception {
-		String sourceAggregateRootId = "src_id";
+		PlaceOrderCommand placeOrderCommand = new PlaceOrderCommand("some order id", "some order details");
 
-		LOG.info("==== Save Source Aggregate Root '{}' ====", sourceAggregateRootId);
-		aggregateRootRepository.save(new AggregateRoot(sourceAggregateRootId));
+		LOG.info("Sending " + placeOrderCommand);
+		rabbitTemplate.convertAndSend(incomingQueueName, placeOrderCommand);
 
-		DomainEvent domainEvent = new DomainEvent("payload");
+		Thread.sleep(3000);
 
-		LOG.info("==== Publish '{}' ====", domainEvent);
-		rabbitTemplate.convertAndSend(QUEUE_NAME, domainEvent);
-	}
+		OrderAcceptedEvent orderAcceptedEvent = (OrderAcceptedEvent) rabbitTemplate
+				.receiveAndConvert(outgoingQueueName);
+		LOG.info("Received " + orderAcceptedEvent);
 
-	public void handleMessage(DomainEvent domainEvent) {
-		LOG.info("==== Receive '{}' ====", domainEvent);
-
-		String targetAggregateRootId = "trg_id";
-
-		LOG.info("==== Save Target Aggregate Root '{}' ====", targetAggregateRootId);
-		aggregateRootRepository.save(new AggregateRoot(targetAggregateRootId));
-		
 		context.close();
 	}
 
 	@Bean
-	SimpleMessageListenerContainer container(ConnectionFactory connectionFactory, MessageListenerAdapter listenerAdapter) {
-		SimpleMessageListenerContainer container = new SimpleMessageListenerContainer();
-		container.setConnectionFactory(connectionFactory);
-		container.setQueueNames(QUEUE_NAME);
-		container.setMessageListener(listenerAdapter);
-		return container;
+	DataSourceTransactionManager dbTransactionManager(DataSource dataSource) {
+		return new DataSourceTransactionManager(dataSource);
 	}
 
 	@Bean
-	MessageListenerAdapter listenerAdapter() {
-		return new MessageListenerAdapter(this);
+	RabbitTransactionManager amqpTransactionManager(ConnectionFactory connectionFactory) {
+		return new RabbitTransactionManager(connectionFactory);
 	}
 
 	@Bean
-	Queue queue() {
-		boolean durable = false;
-		return new Queue(QUEUE_NAME, durable);
+	ChainedTransactionManager inboundTransactionManager(RabbitTransactionManager amqpTransactionManager,
+			DataSourceTransactionManager dbTransactionManager) {
+		return new ChainedTransactionManager(amqpTransactionManager, dbTransactionManager);
 	}
 
 	@Bean
-	TopicExchange exchange() {
-		return new TopicExchange("spring-boot-exchange");
+	ChainedTransactionManager outboundTransactionManager(DataSourceTransactionManager dbTransactionManager,
+			RabbitTransactionManager amqpTransactionManager) {
+		return new ChainedTransactionManager(dbTransactionManager, amqpTransactionManager);
 	}
 
 	@Bean
-	Binding binding(Queue queue, TopicExchange exchange) {
-		return BindingBuilder.bind(queue).to(exchange).with(QUEUE_NAME);
+	Queue incomingQueue() {
+		return new Queue(incomingQueueName);
+	}
+
+	@Bean
+	Queue outgoingQueue() {
+		return new Queue(outgoingQueueName);
+	}
+
+	@Bean
+	TopicExchange exchange(@Value("${application.exchange}") String exchangeName) {
+		return new TopicExchange(exchangeName);
+	}
+
+	@Bean
+	Binding incomingQueueBinding(TopicExchange exchange, @Qualifier("incomingQueue") Queue queue) {
+		return BindingBuilder.bind(queue).to(exchange).with(incomingQueueName);
+	}
+
+	@Bean
+	Binding outgoingQueueBinding(TopicExchange exchange, @Qualifier("outgoingQueue") Queue queue) {
+		return BindingBuilder.bind(queue).to(exchange).with(outgoingQueueName);
 	}
 
 }

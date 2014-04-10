@@ -1,10 +1,10 @@
 package design.besteffort1pc;
 
-public class AggregateRoot {
+public class Order {
 
 	private final String id;
 
-	public AggregateRoot(String id) {
+	public Order(String id) {
 		this.id = id;
 	}
 
@@ -14,7 +14,7 @@ public class AggregateRoot {
 
 	@Override
 	public String toString() {
-		return "AggregateRoot [id=" + id + "]";
+		return "Order [id=" + id + "]";
 	}
 
 }

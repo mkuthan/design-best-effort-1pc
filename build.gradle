@@ -25,6 +25,10 @@ dependencies {
 	compile('org.springframework.boot:spring-boot-starter-amqp')
 	compile('org.springframework.boot:spring-boot-starter-jdbc')
 	compile('org.springframework.boot:spring-boot-starter-integration')
+	
+	compile('org.springframework.data:spring-data-commons:1.7.1.RELEASE')
+	
+	compile('org.springframework.integration:spring-integration-amqp:3.0.1.RELEASE')
 	compile('org.springframework.integration:spring-integration-jdbc:3.0.1.RELEASE')
 	
 	runtime('mysql:mysql-connector-java')
